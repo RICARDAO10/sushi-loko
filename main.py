@@ -1,154 +1,200 @@
-from flask import Flask, request, jsonify
+import os
+import json
 import requests
+from flask import Flask, request
+from openai import OpenAI
 
 app = Flask(__name__)
 
-# === CONFIGURAÇÕES ===
-VERIFY_TOKEN = "sushiloko"
-ACCESS_TOKEN = "EAAKhY88ZAzLUBPDzZCo65f1jedrS0uInZBMZCTlyxNdpOxxg7KjQvuVhd5ulNSLZAJ92WR2NzFBjQOj5c5ARDPjTO8OjbmS4ZBsqo6LRKrh4bQGhZBPhLHMdaKIw6xETSj1NscJmM3CldXURgGyJOZBSofvGB5X2ga8t4vrbh8px9D8FLPD3HnYUi6f3AXmkkeFDMt4ZC9r5EhrhD2Wa9H7ZCv6q3rwJpxZCplMqAoTwNrLOLAZD"
-PHONE_NUMBER_ID = "697307343464625"
-OPENROUTER_API_KEY = "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"
-CARDAPIO_IMAGE_URL = "https://via.placeholder.com/600x400.png?text=Sushi+Loko+Cardápio"
+# Dados sensíveis (use variáveis de ambiente no Railway se preferir)
+TOKEN = os.getenv("EAAKhY88ZAzLUBPIrvbnhimEVCmZCK0dJOsxrAVvANEe74ZAxAO0mqB89NzxPBK4WeWHB1iYSsBbE2WrIyOkSDJUEgaiFJ8zjAhFJqcwb5PRvMmgmBMZB2axfUIdAXZAZChfFxHE5ZCIZBz4FxSwHWv9ILuT8bqOCI8LoJDqlkaTBZAO1nCZCppLuwevRY1trNA4tKubkP3YERVVfLJEioBiNbxF83jMF0fJCFJkEZBUpl0X2gZDZD") or "SEU_TOKEN_DO_WHATSAPP"
+ID_TELEFONE = os.getenv("697307343464625") or "SEU_ID_DE_TELEFONE"
+IA_TOKEN = os.getenv("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") or "SEU_TOKEN_OPENROUTER"
 
-# === DADOS TEMPORÁRIOS EM MEMÓRIA ===
+# Dicionário para armazenar os estados dos clientes
 clientes = {}
 
-# === FUNÇÕES AUXILIARES ===
+@app.route("/", methods=["GET"])
+def verificar():
+    token = request.args.get("hub.verify_token")
+    desafio = request.args.get("hub.challenge")
+    if token == "123456":
+        return desafio
+    return "Token inválido", 403
 
-def enviar_mensagem(numero, texto, opcoes=None, imagem=None):
-    url = f"https://graph.facebook.com/v18.0/{PHONE_NUMBER_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {ACCESS_TOKEN}",
-        "Content-Type": "application/json"
-    }
+@app.route("/", methods=["POST"])
+def receber():
+    body = request.json
+    try:
+        mensagem = body["entry"][0]["changes"][0]["value"]["messages"][0]
+        texto = mensagem.get("text", {}).get("body") or mensagem.get("button", {}).get("payload")
+        numero = mensagem["from"]
 
-    data = {
+        if numero not in clientes:
+            clientes[numero] = {
+                "nome": "",
+                "pedido": "",
+                "endereco": "",
+                "total": 0.0,
+                "finalizado": False
+            }
+
+        cliente = clientes[numero]
+
+        if not cliente["nome"]:
+            cliente["nome"] = texto
+            enviar_mensagem(numero, f"Oi {cliente['nome']}! 😄 Que bom ter você aqui no Sushi Loko! 🍣")
+            enviar_mensagem_com_botao(numero, "Clique abaixo para ver nosso cardápio:", "Ver Cardápio")
+        elif texto.lower() == "ver cardápio":
+            enviar_imagem(numero, "https://i.imgur.com/VWUgO1a.png", "📸 Este é o nosso cardápio!")
+            enviar_mensagem(numero, "Digite o que você deseja pedir:")
+        elif not cliente["pedido"]:
+            cliente["pedido"] = texto
+            cliente["total"] = calcular_total(texto)
+            enviar_mensagem(numero, "Ótimo! Agora me diga seu endereço de entrega 🏠:")
+        elif not cliente["endereco"]:
+            cliente["endereco"] = texto
+            resumo = (
+                f"✅ Pedido finalizado:\n"
+                f"📦 Pedido: {cliente['pedido']}\n"
+                f"📍 Endereço: {cliente['endereco']}\n"
+                f"💵 Total: R${cliente['total']:.2f}"
+            )
+            enviar_mensagem(numero, resumo + "\n\nConfirma o pedido? Clique abaixo:")
+            enviar_botoes(numero, "Confirmar pedido?", ["Sim", "Cancelar"])
+        elif texto.lower() in ["sim", "0"] and not cliente["finalizado"]:
+            cliente["finalizado"] = True
+            resumo = (
+                f"✅ Pedido finalizado:\n"
+                f"📦 Pedido: {cliente['pedido']}\n"
+                f"📍 Endereço: {cliente['endereco']}\n"
+                f"💵 Total: R${cliente['total']:.2f}"
+            )
+            enviar_mensagem(numero, resumo + "\nObrigado pelo pedido! 😄🍣")
+        elif texto.lower() in ["cancelar", "1"] and not cliente["finalizado"]:
+            enviar_mensagem(numero, "Pedido cancelado 😢 Se quiser fazer um novo, é só digitar novamente.")
+            clientes.pop(numero)
+        elif cliente["finalizado"]:
+            clientes.pop(numero)
+            enviar_mensagem(numero, "Se quiser fazer um novo pedido, digite seu nome 📝:")
+        else:
+            resposta = consultar_ia(texto)
+            enviar_mensagem(numero, resposta)
+
+    except Exception as e:
+        print("Erro ao processar mensagem:", e)
+
+    return "ok", 200
+
+def enviar_mensagem(numero, texto):
+    url = f"https://graph.facebook.com/v19.0/{ID_TELEFONE}/messages"
+    payload = {
         "messaging_product": "whatsapp",
         "to": numero,
         "type": "text",
         "text": {"body": texto}
     }
+    headers = {
+        "Authorization": f"Bearer {TOKEN}",
+        "Content-Type": "application/json"
+    }
+    requests.post(url, headers=headers, json=payload)
 
-    if imagem:
-        data["type"] = "image"
-        data["image"] = {"link": imagem}
-    elif opcoes:
-        botoes = [{"type": "reply", "reply": {"id": str(i), "title": op}} for i, op in enumerate(opcoes)]
-        data["type"] = "interactive"
-        data["interactive"] = {
+def enviar_imagem(numero, link, texto):
+    url = f"https://graph.facebook.com/v19.0/{ID_TELEFONE}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": numero,
+        "type": "image",
+        "image": {
+            "link": link,
+            "caption": texto
+        }
+    }
+    headers = {
+        "Authorization": f"Bearer {TOKEN}",
+        "Content-Type": "application/json"
+    }
+    requests.post(url, headers=headers, json=payload)
+
+def enviar_mensagem_com_botao(numero, texto, titulo_botao):
+    url = f"https://graph.facebook.com/v19.0/{ID_TELEFONE}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": numero,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": texto},
+            "action": {
+                "buttons": [
+                    {
+                        "type": "reply",
+                        "reply": {"id": titulo_botao.lower(), "title": titulo_botao}
+                    }
+                ]
+            }
+        }
+    }
+    headers = {
+        "Authorization": f"Bearer {TOKEN}",
+        "Content-Type": "application/json"
+    }
+    requests.post(url, headers=headers, json=payload)
+
+def enviar_botoes(numero, texto, opcoes):
+    botoes = []
+    for i, opcao in enumerate(opcoes):
+        botoes.append({
+            "type": "reply",
+            "reply": {"id": str(i), "title": opcao}
+        })
+
+    url = f"https://graph.facebook.com/v19.0/{ID_TELEFONE}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": numero,
+        "type": "interactive",
+        "interactive": {
             "type": "button",
             "body": {"text": texto},
             "action": {"buttons": botoes}
         }
-
-    requests.post(url, headers=headers, json=data)
-
-def gerar_resposta_ia(mensagem, contexto):
-    url = "https://openrouter.ai/api/v1/chat/completions"
+    }
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {TOKEN}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": "openai/gpt-3.5-turbo",
-        "messages": contexto + [{"role": "user", "content": mensagem}]
+    requests.post(url, headers=headers, json=payload)
+
+def calcular_total(pedido):
+    menu = {
+        "sushi": 20,
+        "temaki": 25,
+        "hot roll": 18,
+        "combo": 50,
+        "yakisoba": 30
     }
-    try:
-        resposta = requests.post(url, headers=headers, json=payload, timeout=10)
-        if resposta.status_code == 200:
-            return resposta.json()["choices"][0]["message"]["content"]
-        elif resposta.status_code == 403:
-            return "Erro: Token inválido"
-        elif resposta.status_code == 401:
-            return "Erro: Assinatura expirada"
-        else:
-            return "Erro ao acessar IA"
-    except Exception as e:
-        return f"Erro na requisição: {str(e)}"
-
-def calcular_preco(pedido):
     total = 0
-    if "sushi" in pedido.lower():
-        total += 25
-    if "temaki" in pedido.lower():
-        total += 18
-    if "combo" in pedido.lower():
-        total += 40
-    return total if total else 30
+    pedido = pedido.lower()
+    for item, preco in menu.items():
+        if item in pedido:
+            total += preco
+    return total
 
-@app.route("/webhook", methods=["GET", "POST"])
-def webhook():
-    if request.method == "GET":
-        token = request.args.get("hub.verify_token")
-        challenge = request.args.get("hub.challenge")
-        if token == VERIFY_TOKEN:
-            return str(challenge), 200
-        else:
-            return "Token inválido", 403
-
-    if request.method == "POST":
-        data = request.get_json()
-        if data.get("object") == "whatsapp_business_account":
-            for entry in data.get("entry", []):
-                for change in entry.get("changes", []):
-                    mensagem = change.get("value", {}).get("messages", [{}])[0]
-                    numero = mensagem.get("from")
-                    texto = mensagem.get("text", {}).get("body", "").strip().lower()
-
-                    if not numero:
-                        continue
-
-                    if numero not in clientes:
-                        clientes[numero] = {
-                            "nome": None,
-                            "pedido": None,
-                            "endereco": None,
-                            "finalizado": False,
-                            "contexto": [{"role": "system", "content": "Você é um atendente simpático e divertido de um restaurante de sushi chamado SushiLoko."}]
-                        }
-                        enviar_mensagem(numero, "Olá! 👋 Bem-vindo ao SushiLoko 🍣", ["Mostrar cardápio"])
-                        continue
-
-                    cliente = clientes[numero]
-
-                    if not cliente["nome"]:
-                        cliente["nome"] = texto.title()
-                        enviar_mensagem(numero, f"Prazer, {cliente['nome']}! Me diga seu pedido. 🍱")
-                    elif not cliente["pedido"]:
-                        cliente["pedido"] = texto
-                        enviar_mensagem(numero, "Beleza! Agora me diga o endereço de entrega 🏡")
-                    elif not cliente["endereco"]:
-                        cliente["endereco"] = texto
-                        preco = calcular_preco(cliente["pedido"])
-                        cliente["total"] = preco
-                        enviar_mensagem(numero, f"Seu pedido ficou R${preco:.2f}. Deseja finalizar?", ["Sim", "Cancelar"])
-                    elif texto == "sim" and not cliente["finalizado"]:
-                        cliente["finalizado"] = True
-                        resumo = (
-                            f"✅ Pedido finalizado:
-"
-                            f"📦 Pedido: {cliente['pedido']}
-"
-                            f"📍 Endereço: {cliente['endereco']}
-"
-                            f"💵 Total: R${cliente['total']:.2f}"
-                        )
-                        enviar_mensagem(numero, resumo + "
-Obrigado pelo pedido! 😄🍣")
-                    elif texto == "mostrar cardápio":
-                        enviar_mensagem(numero, "Aqui está nosso cardápio:", imagem=CARDAPIO_IMAGE_URL)
-                    elif cliente["finalizado"]:
-                        clientes.pop(numero)
-                        enviar_mensagem(numero, "Vamos recomeçar seu atendimento. Qual seu nome?")
-                    else:
-                        resposta = gerar_resposta_ia(texto, cliente["contexto"])
-                        cliente["contexto"].append({"role": "user", "content": texto})
-                        cliente["contexto"].append({"role": "assistant", "content": resposta})
-                        enviar_mensagem(numero, resposta)
-
-        return jsonify({"status": "ok"}), 200
-
-import os
+def consultar_ia(pergunta):
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=IA_TOKEN
+    )
+    resposta = client.chat.completions.create(
+        model="openchat/openchat-7b",
+        messages=[
+            {"role": "system", "content": "Você é um atendente do restaurante Sushi Loko. Seja simpático, informal e ajude com pedidos."},
+            {"role": "user", "content": pergunta}
+        ]
+    )
+    return resposta.choices[0].message.content.strip()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
