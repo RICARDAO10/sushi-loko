@@ -18,7 +18,7 @@ clientes = {}
 def verificar():
     token = request.args.get("hub.verify_token")
     desafio = request.args.get("hub.challenge")
-    if token == "123456":
+    if token == "123456r":
         return desafio
     return "Token inválido", 403
 
