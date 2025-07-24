@@ -6,15 +6,15 @@ from openai import OpenAI
 
 app = Flask(__name__)
 
-# Dados sensíveis (use variáveis de ambiente no Railway se preferir)
+# Tokens e IDs (use variáveis de ambiente em produção)
 TOKEN = os.getenv("EAAKhY88ZAzLUBPIrvbnhimEVCmZCK0dJOsxrAVvANEe74ZAxAO0mqB89NzxPBK4WeWHB1iYSsBbE2WrIyOkSDJUEgaiFJ8zjAhFJqcwb5PRvMmgmBMZB2axfUIdAXZAZChfFxHE5ZCIZBz4FxSwHWv9ILuT8bqOCI8LoJDqlkaTBZAO1nCZCppLuwevRY1trNA4tKubkP3YERVVfLJEioBiNbxF83jMF0fJCFJkEZBUpl0X2gZDZD") or "SEU_TOKEN_DO_WHATSAPP"
 ID_TELEFONE = os.getenv("697307343464625") or "SEU_ID_DE_TELEFONE"
 IA_TOKEN = os.getenv("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") or "SEU_TOKEN_OPENROUTER"
 
-# Dicionário para armazenar os estados dos clientes
+# Estados dos clientes
 clientes = {}
 
-@app.route("/", methods=["GET"])
+@app.route("/webhook", methods=["GET"])
 def verificar():
     token = request.args.get("hub.verify_token")
     desafio = request.args.get("hub.challenge")
@@ -22,7 +22,7 @@ def verificar():
         return desafio
     return "Token inválido", 403
 
-@app.route("/", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def receber():
     body = request.json
     try:
