@@ -7,9 +7,9 @@ from openai import OpenAI
 app = Flask(__name__)
 
 # Tokens e IDs via variáveis de ambiente
-TOKEN = os.getenv("TOKEN_WHATSAPP", "SEU_TOKEN_DO_WHATSAPP")
-ID_TELEFONE = os.getenv("ID_TELEFONE_WHATSAPP", "SEU_ID_DE_TELEFONE")
-IA_TOKEN = os.getenv("IA_TOKEN_OPENROUTER", "SEU_TOKEN_OPENROUTER")
+TOKEN = os.getenv("TOKEN")
+ID_TELEFONE = os.getenv("ID_TELEFONE")
+IA_TOKEN = os.getenv("IA_TOKEN")
 
 # Inicialização do cliente OpenAI via OpenRouter
 client = OpenAI(
