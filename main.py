@@ -16,10 +16,11 @@ client = OpenAI(
     api_key=IA_TOKEN,
     base_url="https://openrouter.ai/api/v1",
     default_headers={
-        "HTTP-Referer": "https://zapmaster.ai",  # Altere para seu domínio real
+        "HTTP-Referer": "https://zapmaster.ai",
         "X-Title": "ZapMaster"
     }
 )
+
 
 # Rota principal (GET e POST do webhook)
 @app.route("/webhook", methods=["GET", "POST"])
