@@ -3,7 +3,7 @@ services:
     name: sushi-loko-bot
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn sushiloko_webhook:app
+    startCommand: gunicorn main:app
     envVars:
       - key: TOKEN
         value: "EAAKhY88ZAzLUBPIrvbnhimEVCmZCK0dJOsxrAVvANEe74ZAxAO0mqB89NzxPBK4WeWHB1iYSsBbE2WrIyOkSDJUEgaiFJ8zjAhFJqcwb5PRvMmgmBMZB2axfUIdAXZAZChfFxHE5ZCIZBz4FxSwHWv9ILuT8bqOCI8LoJDqlkaTBZAO1nCZCppLuwevRY1trNA4tKubkP3YERVVfLJEioBiNbxF83jMF0fJCFJkEZBUpl0X2gZDZD"
