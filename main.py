@@ -9,7 +9,7 @@ app = Flask(__name__)
 # Tokens e IDs via variáveis de ambiente
 TOKEN = os.getenv("TOKEN")
 ID_TELEFONE = os.getenv("ID_TELEFONE")
-IA_TOKEN = os.getenv("IA_TOKEN")
+IA_TOKEN = os.getenv("OPENAI_API_KEY")  # Corrigido aqui
 
 # Inicialização do cliente OpenAI via OpenRouter
 client = OpenAI(
@@ -20,7 +20,6 @@ client = OpenAI(
         "X-Title": "ZapMaster"
     }
 )
-
 
 # Rota principal (GET e POST do webhook)
 @app.route("/webhook", methods=["GET", "POST"])
@@ -71,7 +70,9 @@ def enviar_mensagem(texto, numero):
         "type": "text",
         "text": {"body": texto}
     }
-    requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code != 200:
+        print("Erro ao enviar mensagem:", response.text)
 
 # Envia imagem do cardápio
 def enviar_imagem(numero):
@@ -85,11 +86,13 @@ def enviar_imagem(numero):
         "to": numero,
         "type": "image",
         "image": {
-            "link": "https://i.imgur.com/mzbdFQ6.jpeg",  # Substitua pelo seu cardápio gerado por IA
+            "link": "https://i.imgur.com/mzbdFQ6.jpeg",
             "caption": "🍣 Cardápio do Sushi Loko"
         }
     }
-    requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=payload)
+    if response.status_code != 200:
+        print("Erro ao enviar imagem:", response.text)
 
 # Gera resposta usando IA do OpenRouter
 def gerar_resposta_ia(texto, nome):
