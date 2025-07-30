@@ -9,7 +9,7 @@ app = Flask(__name__)
 # Tokens e IDs via variáveis de ambiente
 TOKEN = os.getenv("TOKEN")
 ID_TELEFONE = os.getenv("ID_TELEFONE")
-IA_TOKEN = os.getenv("OPENAI_API_KEY")  # Corrigido aqui
+IA_TOKEN = os.getenv("OPENAI_API_KEY")
 
 # Inicialização do cliente OpenAI via OpenRouter
 client = OpenAI(
