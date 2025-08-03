@@ -1,1 +1,1 @@
-web: python sushiloko_webhook.py
+web: python main.py
