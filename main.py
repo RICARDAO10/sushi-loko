@@ -22,6 +22,9 @@ client = OpenAI(
 )
 
 # Rota principal (GET e POST do webhook)
+@app.route("/", methods=["GET"])
+def home():
+    return "Servidor do Sushi Loko está no ar!"
 @app.route("/webhook", methods=["GET", "POST"])
 def receber():
     if request.method == "GET":
